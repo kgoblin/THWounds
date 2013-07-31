@@ -2,7 +2,8 @@
 $max_damage_value = 9999
 $max_wound_age = 999
 
-$damage_types = Hash.new {|h,k| h[k] = 0}
+$damage_types = Hash.new {|h,k| h[k] = nil}
+$dmage_special_types = Hash.new {|h,k| h[k] = Hash.new {|h2,k2| h2[k2] = nil}}
 $damage_severity = {
 	:minor => 1,
 	:moderate => 2,
@@ -48,7 +49,7 @@ class Wound
 end
 
 class WoundMatch
-	attr_reader :type, :severity, :special\
+	attr_reader :type, :severity, :special
 	
 	def initialize(t,s,sp)
 		@type = t
@@ -88,12 +89,40 @@ class WoundMatch
 	end
 end
 
+class WoundHealRule
+
+	attr_reader :match, :amount, :age
+
+	def initialize(woundmatch, amt, age)
+		@match = woundmatch
+		@amount = amt
+		@age = age
+	end
+	
+	def <=>(other)
+		self.match <=> other.match
+	end
+end
+
+class WoundAggrevateRule
+
+	def initialize(woundmatch, th, cf)
+		@match = woundmatch
+		@threshold = th
+		@factor = cf
+	end
+	
+	def <=>(other)
+		self.match <=> other.match
+	end
+end
+
 #
 # wound space holds wounds & tempers
 #
 class WoundSpace
 
-	attr_reader :wounds, :atempers , :btempers, :conditions
+	attr_reader :wounds, :atempers , :btempers, :conditions, :healrules, :dealrules
 	
 	def initialize()
 		@atempers = {}
@@ -102,32 +131,6 @@ class WoundSpace
 		@wounds = []
 		@healrules = []
 		@dealrules = []
-	end
-	
-	def define_heal_rule(woundmatch, amt, age)
-		@heal_woundrules << {
-			:match => woundmatch,
-			:amount => amt,
-			:age => age
-		}
-		self
-	end
-	
-	def define_aggrevate_rule(woundmatch, amt, factor)
-		@deal_woundrules = {
-			:match => woundmatch,
-			:amount => amt,
-			:factor => factor
-		}
-		self
-	end
-	
-	def add_atemper(name, temper)
-		@atempers[name] =  temper
-	end
-	
-	def add_btemper(name, temper)
-		@btempers[name] = temper
 	end
 	
 	def status()
@@ -143,13 +146,14 @@ class WoundSpace
 		xhrm = 0
 		xhra = 0
 		@healrules.each do |hr|
-			m = hr[:match].match_count(wound)
+			m = hr.match.match_count(wound)
 			next unless m > 0
 			next unless m >= xhrm
-			next unless hr[:age] <= wound.age
-			next unless hr[:amount] > xhra
 			xhrm = m
-			xhra = hr[:amount]
+			xhra = 0
+			next unless hr.age <= wound.age
+			next unless hr.amount > xhra
+			xhra = hr.amount
 		end
 		
 		{:amount => xhra}
@@ -161,18 +165,19 @@ class WoundSpace
 		xdrn = 0
 		xdrc = 0
 		@dealrules.each do |dr|
-			m = dr[:match].match_count(wound)
+			m = dr.match.match_count(wound)
 			next unless m > 0
 			next unless m >= xhrm
-			a = dr[:amount]
-			next unless a < wound.amount
-			n = (wound.amount - a) / dr[:factor]
+			xdrm = m
+			a = dr.threshold
+			n = (wound.amount - a) / dr.factor
 			c = (a + (2*n))
 			next unless c > xdrc
-			xdrm = m
+			xdrc = c
+			next unless a < wound.amount
+			next unless n > 0
 			xdra = a
 			xdrn = n
-			xdrc = c
 		end
 		
 		{:current_wound_amount = xdra, :new_wound_amount = xdrn}
@@ -190,6 +195,8 @@ class WoundSpace
 			@wound.amount -= hr[:amount]
 			if (wound.amount == 0)
 				drp_wounds << wound
+				next if wound.severity == $damage.severity.values.min
+				add_wounds << Wound.new(wound.type, wound.severity - 1, hr[:amount] + wound.severity, wound.special)
 				next
 			end
 			
