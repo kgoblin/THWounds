@@ -1,23 +1,25 @@
 
-$max_damage_value = 9999
-$max_wound_age = 999
-
-$damage_types = Hash.new {|h,k| h[k] = nil}
-$dmage_special_types = Hash.new {|h,k| h[k] = Hash.new {|h2,k2| h2[k2] = nil}}
-$damage_severity = {
-	:minor => 1,
-	:moderate => 2,
-	:major => 3,
-	:massive => 4,
-}
-$damage_severity.freeze!
-
 class Wound
-	attr_accessor :type, :severity, :special, :amount, :age
+	def self.Severity()
+		{
+			:minor => 1,
+			:moderate => 2,
+			:major => 3,
+			:massive => 4
+		}.freeze
+	end
+	def self.MaxSeverity() ; self.Severity.values.max ; end
+	def self.MinSeverity() ; self.Severity.values.min ; end
+	def self.MaxDamageValue() ; 9999 ; end
+	def self.MaxWoundAge() ; 999 ; end
+		
 	
-	def initialize(t,s, amt, sp = nil)
+	attr_accessor :type, :subtype, :severity, :special, :amount, :age
+	
+	def initialize(t, st, s, amt, sp = nil)
 		@special = sp
 		@type = t
+		@subtype = st
 		@severity = s
 		@age = 0
 		@amount = amt
@@ -25,13 +27,20 @@ class Wound
 	
 	def amount()
 		@amount = 0 if @amount < 0
-		@amount = $max_damage_value if @amount > $max_damage_value
+		@amount = Wound.MaxDamageValue if @amount > Wound.MaxDamageValue
 		@amount
+	end
+	
+	def age()
+		@age = 0 if @age < 0
+		@age = Wound.MaxWoundAge if @age > Wound.MaxWoundAge
+		@age
 	end
 	
 	def <=>(other)
 		compares = [
 			(self.type <=> other.type),
+			(self.subtype <=> other.subtype),
 			(self.severity <=> other.severity),
 			(self.special <=> other.special),
 			(self.age <=> other.age),
@@ -49,17 +58,19 @@ class Wound
 end
 
 class WoundMatch
-	attr_reader :type, :severity, :special
+	attr_reader :type, :subtype, :severity, :special
 	
-	def initialize(t,s,sp)
-		@type = t
-		@severity = s
-		@special = sp
+	def initialize(*ps)
+		@type = ps.shift
+		@subtype = ps.shift
+		@severity = ps.shift
+		@special = ps.shift
 	end
 
 	def <=>(other)
 		compares = [
 			(self.type <=> other.type),
+			(self.subtype <=> other.subtype),
 			(self.severity <=> other.severity),
 			(self.special == other.special ? 0 : (self.special.nil? ? -1 :  self.special <=> other.special)),
 		]
@@ -75,6 +86,7 @@ class WoundMatch
 	def match_count(wound)
 		[
 			(!self.type.nil? and (wound.type == self.type)),
+			(!self.subtype.nil? and (wound.subtype == self.subtype)),
 			(!self.severity.nil? and (wound.severity == self.severity)),
 			(
 				(wound.special.nil? and self.special.nil?) 
@@ -187,21 +199,25 @@ class WoundSpace
 		drp_wounds = []
 		add_wounds = []
 		@wounds.each do |wound|
-			@wound.age += 1 unless wound.age.nil?
-			@wound.age = nil if @wound.age >= $max_wound_age
+			@wound.age += 1
 			
 			#heal with best applicable rule
 			hr = find_heal_rule(wound)
-			@wound.amount -= hr[:amount]
+			
+			if hr[:amount] > 0
+				@wound.amount -= hr[:amount]
+				@wound.age = 0
+			end
+			
 			if (wound.amount == 0)
 				drp_wounds << wound
-				next if wound.severity == $damage.severity.values.min
+				next if wound.severity == Wound.MinSeverity
 				add_wounds << Wound.new(wound.type, wound.severity - 1, hr[:amount] + wound.severity, wound.special)
 				next
 			end
 			
 			#dont go into aggrevate phase if at max possible damage severity
-			next if wound.severity == $damage_severity.values.max
+			next if wound.severity == Wound.MaxSeverity
 			dr = find_aggrevate_rule(wound)
 			next if dr[:new_wound_amount] == 0
 			wound.amount = dr[:current_wound_amount]

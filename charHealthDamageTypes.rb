@@ -6,37 +6,38 @@ require 'charHealthBase'
 #
 #
 
-i = 0
+$damage_types = Hash.new {|h,k| h[k] = nil}
+$damage_subtypes = Hash.new {|h,k| h[k] = Hash.new {|h2,k2| h2[k2] = nil}
+$damage_specials = Hash.new {|h,k| h[k] = Hash.new {|h2,k2| h2[k2] = nil}
+
 [
-	:slash,
-	:stab,
-	:impact,
-	:burn,
-	:magic_drain,
-	:blind,
-	:freeze,
-	:electric,
+	:physical,
 	:fatigue,
-].each do |damageType|
-	$damage_types[damageType] = i
-	i += 1
-end
+	:energy,
+	:blind
+].each_with_index {|x,i| $damage_types[x] = i}
 
 def defineSpecials(damageType, *specialTypes)
 	i = 0 
-	h = $damage_special_types[damageType)
-	specialTypes.each do |specType|
-		h[specType] = i
-		i += 1
-	end
+	h = $damage_specials[damageType)
+	specialTypes.each_with_index {|x,i| h[x] = i}
 	h
 end
 
-def dtype(type, severity = nil, special = nil)
-	dt = $damage_types[damageType]
-	st = $damage_severity[severity]
-	spt = $damaget_special_types[damageType][special]
-	WoundMatch.new(dt,st,spt)
+def defineSubtypes(damageType, *subTypes)
+	i = 0 
+	h = $damage_subtypes[damageType)
+	subTypes.each_with_index {|x,i| h[x] = i}
+	h
+end
+
+def dtype(*ps)
+	WoundMatch.new(
+		$damage_types[ps.shift],
+		$damage_subtypes[ps.shift],
+		Wound.Severity[ps.shift],
+		$damage_specials[ps.shift]
+	)
 end
 
 $default_heal_rules = []
@@ -58,13 +59,20 @@ end
 # define details about damage types here
 #
 
-#slash
-defineSpecials(:slash, *[
+defineSubtypes(:physical, *[
+	:slash,
+	:pierce,
+	:impact
+])
+
+defineSpecials(:physical, *[
 	:critical,
 	:head,
 	:left_arm,
-	:right_arm,
+	:right_arm
 ])
+
+#slash
 
 defineHealRule(dtype(:slash),2,5)
 defineHealRule(dtype(:slash,nil,:critical),2,7)
