@@ -87,6 +87,7 @@ class WoundMatch
 		[
 			(!self.type.nil? and (wound.type == self.type)),
 			(!self.subtype.nil? and (wound.subtype == self.subtype)),
+			(!self.severity.nil? and (wound.severity >= self.severity)),
 			(!self.severity.nil? and (wound.severity == self.severity)),
 			(
 				(wound.special.nil? and self.special.nil?) 
